@@ -19,14 +19,20 @@ Namespace <- R6::R6Class("Namespace",
         nonfuncts = NULL,
 
         initialize = function(pkgname) {
+            logger$info(sprintf("Namespace$initialize(pkgname:%s)", pkgname))
             self$package_name <- pkgname
             ns <- asNamespace(pkgname)
             objects <- sanitize_names(objects(ns))
             self$exports <- sanitize_names(getNamespaceExports(ns))
             self$unexports <- setdiff(objects, self$exports)
             isf <- sapply(self$exports, function(x) {
-                        is.function(get(x, envir = ns))})
-            self$functs <- self$exports[isf]
+                is.function(get(x, envir = ns))})
+            logger$info("isf = ", isf)
+            if (length(isf) > 0) {
+                self$functs <- self$exports[isf]
+            } else {
+                self$functs <- c()
+            }
             self$nonfuncts <- setdiff(self$exports, self$functs)
         },
 
@@ -59,6 +65,8 @@ Namespace <- R6::R6Class("Namespace",
         }
     )
 )
+
+
 
 #' A data structure for a session workspace
 #'
@@ -94,6 +102,7 @@ Workspace <- R6::R6Class("Workspace",
 
         initialize = function() {
             for (pkgname in self$loaded_packages) {
+                logger$info("workspace initialize: package=", pkgname)
                 self$namespaces[[pkgname]] <- Namespace$new(pkgname)
             }
         },
@@ -110,7 +119,7 @@ Workspace <- R6::R6Class("Workspace",
         },
 
         guess_package = function(object) {
-            logger$info("loaded_packages:", self$loaded_packages)
+            logger$info("guess_package loaded_packages:", self$loaded_packages)
 
             for (pkgname in rev(self$loaded_packages)) {
                 ns <- self$get_namespace(pkgname)
@@ -172,6 +181,7 @@ Workspace <- R6::R6Class("Workspace",
         },
 
         get_help = function(topic, pkgname = NULL) {
+            logger$info("workspace$get_help", c(topic, pkgname))
             if (is.null(pkgname) || is.na(pkgname)) {
                 pkgname <- self$guess_package(topic)
             }
@@ -240,6 +250,7 @@ Workspace <- R6::R6Class("Workspace",
 #' @param parse set \code{FALSE} to disable parsing file
 #' @export
 workspace_sync <- function(uri, temp_file = NULL, run_lintr = TRUE, parse = FALSE) {
+    
     if (is.null(temp_file)) {
         path <- path_from_uri(uri)
     } else {
@@ -254,8 +265,8 @@ workspace_sync <- function(uri, temp_file = NULL, run_lintr = TRUE, parse = FALS
     }
 
     if (run_lintr) {
-        diagnostics <- tryCatch(diagnose_file(path), error = function(e) NULL)
-        # diagnostics <- diagnose_file(path)
+        #diagnostics <- tryCatch(diagnose_file(path), error = function(e) NULL)
+        diagnostics <- diagnose_file(path)
     } else {
         diagnostics <- NULL
     }
@@ -269,10 +280,15 @@ process_sync_in <- function(self) {
     sync_out <- self$sync_out
 
     uris <- sync_in$keys()
-    # avoid heavy cpu usage
-    if (length(uris) > 8) {
-        uris <- uris[1:8]
+
+    if (length(uris) > 0) {
+        logger$info("process_sync_in")
     }
+    # avoid heavy cpu usage
+#    if (length(uris) > 8) {
+#        uris <- uris[1:8]
+                                        #    }
+    
     for (uri in uris) {
         parse <- FALSE
         if (sync_out$has(uri)) {
@@ -286,11 +302,17 @@ process_sync_in <- function(self) {
             }
         }
 
+
         item <- sync_in$pop(uri)
         run_lintr <- item$run_lintr && self$run_lintr
         parse <- parse || item$parse
         doc <- item$document
         path <- path_from_uri(uri)
+
+        logger$info(sprintf("---> uri:%s, run_lintr:%s, path:%s",
+                            uri,
+                            run_lintr,
+                            path))
         if (is.null(doc)) {
             temp_file <- NULL
         } else {
@@ -302,11 +324,15 @@ process_sync_in <- function(self) {
             write(item$document, file = temp_file)
         }
 
+        logger$info("---> temp_file", temp_file)
+
         sync_out$set(
             uri,
             list(
                 process = callr::r_bg(
-                    function(...) languageserver::workspace_sync(...),
+                                     function(...) {
+                                         languageserver::workspace_sync(...)
+                                     },
                     list(
                         uri = uri,
                         temp_file = temp_file,
@@ -323,13 +349,25 @@ process_sync_in <- function(self) {
 }
 
 process_sync_out <- function(self) {
+    if (length(self$sync_out$keys()) > 0) {        
+        logger$info("process_sync_out")
+    }
+    
     for (uri in self$sync_out$keys()) {
         item <- self$sync_out$get(uri)
         process <- item$process
 
+        logger$info(sprintf("----> uri:%s, is.null(process):%s, process$is_alive():%s",
+                            uri,
+                            is.null(process),
+                            process$is_alive()))
+
         if (!is.null(process) && !process$is_alive()) {
             process_result <- process$get_result()
+            logger$info("process_result", process_result)
             diagnostics <- process_result$diagnostics
+            logger$info("----> diagnostics:%s", diagnostics)
+            
             if (!is.null(diagnostics)) {
                 self$deliver(
                     Notification$new(

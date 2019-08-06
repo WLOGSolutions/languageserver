@@ -91,7 +91,12 @@ workspace_completion <- function(workspace, full_token) {
     if (is.na(pkg) || exported_only) {
         for (nsname in c("_workspace_", packages)) {
             ns <- workspace$get_namespace(nsname)
-            functs <- ns$functs[startsWith(ns$functs, token)]
+            if (length(ns$functs) > 0) {
+                functs <- ns$functs[startsWith(ns$functs, token)]
+            } else {
+                functs <- list()
+            }
+            
             if (nsname == "_workspace_") {
                 tag <- "[workspace]"
             } else {
@@ -102,7 +107,12 @@ workspace_completion <- function(workspace, full_token) {
                      kind = CompletionItemKind$Function,
                      detail = tag)
             })
-            nonfuncts <- ns$nonfuncts[startsWith(ns$nonfuncts, token)]
+            if (length(ns$nonfuncts) > 0) {
+                nonfuncts <- ns$nonfuncts[startsWith(ns$nonfuncts, token)]
+            } else {
+                nonfuncts <- list()
+            }
+
             nonfuncts_completions <- lapply(nonfuncts, function(object) {
                 list(label = object,
                      kind = CompletionItemKind$Field,

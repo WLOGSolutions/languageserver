@@ -8,17 +8,17 @@ NULL
 
 #' @rdname diagnostics
 diagnostic_range <- function(result) {
-    line <- result$line_number - 1
+    line <- result$line_number
     column <- result$column_number - 1
     if (is.null(result$ranges)) {
         range(
-            start = list(line = line, character = column),
-            end = list(line = line, character = column + 1)
+            start = position(line = line, character = column),
+            end = position(line = line, character = column + 1)
         )
     } else {
         range(
-            start = list(line = line, character = result$ranges[[1]][1] - 1),
-            end = list(line = line, character = result$ranges[[1]][2])
+            start = position(line = line, character = result$ranges[[1]][1] - 1),
+            end = position(line = line, character = result$ranges[[1]][2])
         )
     }
 }
@@ -62,11 +62,15 @@ find_config <- function(filename) {
 #'
 #' @param path a character, the path to a file
 diagnose_file <- function(path) {
-    if (is.null(find_config(path))) {
-        linters <- getOption("languageserver.default_linters", NULL)
-    } else {
-        linters <- NULL
-    }
+    
+    ## if (is.null(find_config(path))) {
+    ##     linters <- getOption("languageserver.default_linters", NULL)
+    ## } else {
+    ##     linters <- NULL
+    ## }
+
+    linters <- lintr::with_defaults(line_length_linter = lintr::line_length_linter(120))
+
     diagnostics <- lapply(lintr::lint(path, linters = linters), diagnostic_from_lint)
     names(diagnostics) <- NULL
     diagnostics

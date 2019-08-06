@@ -14,6 +14,20 @@ on_initialize <- function(self, id, params) {
     self$rootPath <- path_from_uri(self$rootUri)
     self$initializationOptions <- params$initializationOptions
     self$ClientCapabilities <- params$capabilities
+
+    logger$info("rootPath:", self$rootPath)
+
+    self$rsuite <- FALSE
+    tryCatch({
+        prj <- RSuite::prj_init(path = self$rootPath)
+        prj <- RSuite::prj_load(prj = prj)
+        self$rsuite <- TRUE
+        logger$info("RSuite project: detected")
+    },
+    abort = function(e) logger$info("RSuite project: not detected"))
+
+    logger$info("libpaths", .libPaths())
+    
     self$deliver(Response$new(id = id, result = list(capabilities = ServerCapabilities)))
 }
 
@@ -27,27 +41,40 @@ on_initialize <- function(self, id, params) {
 #' @keywords internal
 on_initialized <- function(self, params) {
     logger$info("on_initialized")
+
+    if (isTRUE(self$rsuite)) {
+        logger$info("Loading rsuite pkgs")
+        prj <- RSuite::prj_init(path = self$rootPath)
+        prj <- RSuite::prj_load(prj = prj)
+        all_pkgs <- rownames(installed.packages())
+
+        ## Load installed deps
+        for (pkg in all_pkgs) {
+            self$workspace$load_package(pkg)
+        }        
+    }
+
     if (is_package(self$rootUri)) {
 
-        project_root <- path_from_uri(self$rootUri)
-        source_dir <- file.path(project_root, "R")
-        files <- list.files(source_dir)
-        for (f in files) {
-            logger$info("load ", f)
-            uri <- path_to_uri(file.path(source_dir, f))
-            self$text_sync(uri, document = NULL, run_lintr = FALSE, parse = TRUE)
-        }
-        deps <- tryCatch(desc::desc_get_deps(project_root), error = function(e) NULL)
-        if (!is.null(deps)) {
-            packages <- Filter(function(x) x != "R", deps$package[deps$type == "Depends"])
-            for (package in packages) {
-                logger$info("load package:", package)
-                self$workspace$load_package(package)
-            }
-        }
+        ## project_root <- path_from_uri(self$rootUri)
+        ## source_dir <- file.path(project_root, "R")
+        ## files <- list.files(source_dir)
+        ## for (f in files) {
+        ##     logger$info("load ", f)
+        ##     uri <- path_to_uri(file.path(source_dir, f))
+        ##     self$text_sync(uri, document = NULL, run_lintr = FALSE, parse = TRUE)
+        ## }
+        ## deps <- tryCatch(desc::desc_get_deps(project_root), error = function(e) NULL)
+        ## if (!is.null(deps)) {
+        ##     packages <- Filter(function(x) x != "R", deps$package[deps$type == "Depends"])
+        ##     for (package in packages) {
+        ##         logger$info("load package:", package)
+        ##         self$workspace$load_package(package)
+        ##     }
+        ## }
     }
-    # TODO: result lint result of the package
-    # lint_result <- lintr::lint_package(rootPath)
+                                        # TODO: result lint result of the package
+                                        # lint_result <- lintr::lint_package(rootPath)
 }
 
 #' shutdown request handler

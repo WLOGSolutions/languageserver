@@ -26,6 +26,8 @@ LanguageServer <- R6::R6Class("LanguageServer",
         initializationOptions = NULL,
         ClientCapabilities = NULL,
 
+        rsuite = FALSE,
+
         sync_in = NULL,
         sync_out = NULL,
         reply_queue = NULL,
@@ -56,7 +58,7 @@ LanguageServer <- R6::R6Class("LanguageServer",
 
             self$process_sync_in <- throttle(
                 function() process_sync_in(self), 0.3)
-            self$process_sync_out <- (function() process_sync_out(self))
+            self$process_sync_out <- (function() process_sync_out(self))            
         },
 
         finalize = function() {
@@ -138,12 +140,14 @@ LanguageServer <- R6::R6Class("LanguageServer",
         },
 
         text_sync = function(uri, document = NULL, run_lintr = TRUE, parse = TRUE) {
+            logger$info(sprintf("text_sync(uri:%s)", uri))
             if (self$sync_in$has(uri)) {
                 # make sure we do not accidentially override list call with `parse = FALSE`
                 item <- self$sync_in$pop(uri)
                 parse <- parse || item$parse
                 run_lintr <- run_lintr || item$run_lintr
             }
+            logger$info(sprintf("----> run_lintr:%s", run_lintr))
             self$sync_in$set(
                 uri, list(document = document, run_lintr = run_lintr, parse = parse))
         },

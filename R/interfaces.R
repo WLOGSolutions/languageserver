@@ -18,7 +18,7 @@ position <- function(line, character) {
       line = line,
       character = character
     ),
-    class = "position"
+    class = c("position", "list")
   )
 }
 
